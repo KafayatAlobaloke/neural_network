@@ -1,0 +1,174 @@
+---
+Analysis output: Breast Cancer Detection
+Author: Kafayat Alobaloke
+---
+
+
+```{r}
+library(ggplot2)
+library(corrplot)
+library(tidyverse)
+library(dplyr)
+library(caret)
+library(nnet)
+library(NeuralNetTools)
+library(gmodels)
+library(tibble)
+```
+
+```{r}
+nn <- read.csv("wdbc.csv")
+```
+
+```{r}
+str(nn)
+```
+
+We need to ensure that the target variable is in factor.
+```{r}
+# Transforming the target variable that I will use to submit to the categorical algorithm into factors and removing the ID and odd target variable
+diagnosis = factor(nn$diagnosis, levels = c("M", "B"), labels = c("M", "B"))
+data = nn[,-1]
+data = data[,-1]
+
+# Adding the newly re-coded variable to the data
+nndata <- cbind(diagnosis, data)
+nndata
+```
+
+```{r}
+summary(nndata)
+```
+
+```{r}
+prop.table(table(nndata$diagnosis))
+```
+
+```{r}
+ggplot(nndata, aes(x=diagnosis, fill = diagnosis))+ 
+  theme_bw()+
+  geom_bar()+
+  labs(x = "Diagnosis", y = "Data Count")
+```
+
+## Density Plot
+
+Here we will observe where the majority of the data lies in the cancer dataset as far as diagnosis is concerned.
+```{r}
+# Density graph for TBSA (Total burn surface area)
+ggplot(nndata, aes(x = diagnosis, fill = diagnosis)) +
+  geom_density(alpha=0.5) +
+  scale_fill_discrete(name = "Cancer Diagnosis", labels = c("M", "B"))
+```
+
+```{r}
+corr_mat <- cor(nndata[,2:ncol(nndata)])
+corrplot(corr_mat, order = "hclust", tl.cex = 1, addrect = 8)
+```
+
+```{r}
+
+nndata %>%
+    summarise_all(
+        funs(sum(is.na(.)))
+    )
+```
+
+## Splitting the data set into Train and Test with 60 and 40 percent respectively
+```{r}
+index <- sample(2, nrow(nndata), replace=TRUE, prob = c(0.60, 0.40))
+traindata <- nndata[index==1, ]
+testdata <- nndata[index==2, ]
+```
+
+## Create Neural network model
+```{r}
+model_nnet <- nnet(diagnosis ~ ., data = traindata, size=15, rang = 1, decay = 8e-4, maxit = 200)
+```
+## Plot a neural interpretation diagram for a neural network object
+```{r}
+par(mar = numeric(4), family = 'serif')
+plotnet(model_nnet, alpha = 0.6)
+```
+## Predict
+```{r}
+pred_nnet <- predict(model_nnet, testdata,type = c("class"))
+```
+
+## Accuracy
+```{r}
+accuracy <- sum(pred_nnet == testdata$diagnosis)/nrow(testdata)
+accuracy
+```
+
+## Create cross table to summarize the result
+```{r}
+CrossTable(testdata$diagnosis, pred_nnet, prop.chisq = FALSE,
+           prop.c = FALSE, prop.r = FALSE, dnn = c("Actual diagnosis",
+                                                   "Predicted diagnosis"))
+```
+
+```{r}
+pred_nnet = factor(pred_nnet, levels = c("M", "B"), labels = c("M", "B"))
+cm_nnet <- confusionMatrix(pred_nnet, testdata$diagnosis, positive = "M")
+cm_nnet
+```
+
+
+The ROC metric measure the auc of the roc curve of each model. This metric is independent of any threshold. Lets remember how these models result with the testing dataset. Prediction classes are obtained by default with a threshold of 0.5 which could not be the best with an unbalanced dataset like this.
+
+Conclusions
+We have found a model based on neural network and LDA preprocessed data with good results over the test set. This model has a sensibility of 0.984 with a F1 score of 0.984
+
+We have tried an stacked model with a little improvement.
+
+Next things to try:
+
+use unbalanced techinques (oversampling, SMOTEâ€¦) previously to apply the models
+
+modify models to use a different metric rather than ROC (auc) which takes in consideration the best threshold
+
+Try different stacking models
+
+```{r}
+
+```
+
+## Relative importance of input variables in neural networks using Garson's algorithm
+```{r}
+garson(model_nnet)
+```
+
+```{r}
+lekprofile(model_nnet)
+```
+
+Notes
+
+Too many variables can cause such problems below
+Increased computer throughput
+Too complex visualization problems
+Decrease efficiency by including variables that have no effect on the analysis
+Make data interpretation difficult
+
+## Using Principal Component Analysis
+Letâ€™s first go on an unsupervised analysis with a PCA analysis.
+To do so, we will remove the id and diagnosis variable, then we will also scale and center the variables.
+```{r}
+pca_res <- prcomp(nndata[,2:ncol(nndata)], center = TRUE, scale = TRUE)
+plot(pca_res, type="l")
+```
+
+## To visualize which variable are the most influential on the first 2 components
+```{r}
+library(ggfortify)
+## Loading required package: methods
+autoplot(pca_res, data = nndata,  colour = 'diagnosis',
+                    loadings = FALSE, loadings.label = TRUE, loadings.colour = "blue")
+```
+
+## Letâ€™s visualize the first 3 components
+```{r}
+pcs3 <- cbind(as_tibble(nndata$diagnosis), as_tibble(pca_res$x))
+GGally::ggpairs(nndata, columns = 2:4, ggplot2::aes(color = diagnosis))
+```
